@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Loader } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { CheckCircle, XCircle, Loader, ArrowRight, ArrowLeft, Trophy, Target } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import { useNotification } from '../contexts/NotificationContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,64 +8,60 @@ import { generateObjectiveQuestion, type ObjectiveQuestion } from '../services/o
 
 export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 
+interface QuestionResult {
+  question: ObjectiveQuestion;
+  selectedAnswer: number | null;
+  isCorrect: boolean;
+}
+
 const ObjetivaPage: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { progress, updateProgress } = useAuth();
-  const [currentQuestion, setCurrentQuestion] = useState<ObjectiveQuestion | null>(null);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [showResult, setShowResult] = useState(false);
+  const [questions, setQuestions] = useState<ObjectiveQuestion[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState<(number | null)[]>(Array(10).fill(null));
   const [loading, setLoading] = useState(false);
-  const [questionId] = useState(() => Date.now().toString());
+  const [showResults, setShowResults] = useState(false);
   const [specialty, setSpecialty] = useState(
     location.state?.specialty || progress.preferences.favoriteSpecialties[0] || 'Cardiologia'
   );
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(
     location.state?.difficulty || progress.preferences.preferredDifficulty || 'medium'
   );
-  const [sessionQuestionsCount, setSessionQuestionsCount] = useState(0);
-  const [sessionTarget] = useState(10); // Meta de 10 questões por sessão
   const { addNotification } = useNotification();
 
-  // Inicializar ou continuar sessão
-  useEffect(() => {
-    const shouldResume = location.state?.resumeSession && progress.currentSession?.isActive;
-    
-    if (shouldResume) {
-      setSessionQuestionsCount(progress.currentSession!.questionsCompleted);
-      setSpecialty(progress.currentSession!.specialty);
-      setDifficulty(progress.currentSession!.difficulty);
-    } else {
-      // Iniciar nova sessão
-      updateProgress({
-        currentSession: {
-          id: Date.now().toString(),
-          specialty,
-          difficulty,
-          mode: 'objetiva',
-          questionsCompleted: 0,
-          questionsTotal: sessionTarget,
-          startedAt: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
-          isActive: true,
-        },
-      });
-    }
-  }, []);
+  const totalQuestions = 10;
+  const currentQuestion = questions[currentIndex];
+  const selectedAnswer = answers[currentIndex];
 
-  const generateQuestion = async () => {
+  // Gerar 10 questões
+  const generateAllQuestions = async () => {
     setLoading(true);
+    addNotification('Gerando 10 questões... Isso pode levar alguns segundos.', 'info');
+    
     try {
-      const question = await generateObjectiveQuestion(specialty, difficulty);
-      setCurrentQuestion(question);
-      setSelectedAnswer(null);
-      setShowResult(false);
-      addNotification('Questão gerada com sucesso!', 'success');
+      const generatedQuestions: ObjectiveQuestion[] = [];
+      
+      for (let i = 0; i < totalQuestions; i++) {
+        const question = await generateObjectiveQuestion(specialty, difficulty);
+        generatedQuestions.push(question);
+        
+        // Notificar progresso
+        if ((i + 1) % 3 === 0) {
+          addNotification(`${i + 1}/${totalQuestions} questões geradas...`, 'info');
+        }
+      }
+      
+      setQuestions(generatedQuestions);
+      setAnswers(Array(totalQuestions).fill(null));
+      setCurrentIndex(0);
+      setShowResults(false);
+      addNotification('✅ Todas as questões foram geradas! Boa sorte!', 'success');
     } catch (error) {
-      console.error('Erro ao gerar questão:', error);
+      console.error('Erro ao gerar questões:', error);
       addNotification(
-        error instanceof Error 
-          ? error.message 
-          : 'Erro ao gerar questão. Verifique se a API Key está configurada.',
+        'Erro ao gerar questões. Verifique sua conexão e API Key.',
         'error'
       );
     } finally {
@@ -73,115 +69,128 @@ const ObjetivaPage: React.FC = () => {
     }
   };
 
-  const submitAnswer = () => {
-    if (selectedAnswer === null) {
-      addNotification('Selecione uma alternativa', 'warning');
-      return;
-    }
+  const handleSelectAnswer = (answerIndex: number) => {
+    if (showResults) return;
     
-    setShowResult(true);
-    const isCorrect = selectedAnswer === currentQuestion?.correctAnswer;
-    
-    // Atualizar progresso
-    if (currentQuestion) {
-      const newSessionCount = sessionQuestionsCount + 1;
-      setSessionQuestionsCount(newSessionCount);
-      
-      const newSpecialties = { ...progress.specialties };
-      if (!newSpecialties[specialty]) {
-        newSpecialties[specialty] = { total: 0, correct: 0 };
-      }
-      newSpecialties[specialty].total++;
-      if (isCorrect) newSpecialties[specialty].correct++;
-      newSpecialties[specialty].lastStudied = new Date().toISOString();
-      
-      const newHistory = [
-        ...(progress.questionHistory || []),
-        {
-          id: questionId,
-          question: currentQuestion.question,
-          answer: currentQuestion.options[selectedAnswer],
-          correct: isCorrect,
-          specialty,
-          type: 'objetiva' as const,
-          timestamp: new Date().toISOString(),
-          difficulty,
-        },
-      ];
-      
-      // Atualizar sessão atual
-      const sessionComplete = newSessionCount >= sessionTarget;
-      const updatedSession = progress.currentSession ? {
-        ...progress.currentSession,
-        questionsCompleted: newSessionCount,
-        lastUpdated: new Date().toISOString(),
-        isActive: !sessionComplete,
-      } : null;
-      
-      updateProgress({
-        totalQuestions: progress.totalQuestions + 1,
-        correctAnswers: progress.correctAnswers + (isCorrect ? 1 : 0),
-        questionHistory: newHistory,
-        specialties: newSpecialties,
-        currentSession: updatedSession,
-        experience: progress.experience + (isCorrect ? 10 : 5),
-      });
-      
-      if (sessionComplete) {
-        addNotification('🎉 Sessão concluída! Parabéns!', 'success');
-      }
-    }
-    
-    if (isCorrect) {
-      addNotification('Resposta correta!', 'success');
-    } else {
-      addNotification('Resposta incorreta. Veja a explicação.', 'error');
+    const newAnswers = [...answers];
+    newAnswers[currentIndex] = answerIndex;
+    setAnswers(newAnswers);
+  };
+
+  const handleNext = () => {
+    if (currentIndex < totalQuestions - 1) {
+      setCurrentIndex(currentIndex + 1);
     }
   };
 
-  return (
-    <DashboardLayout>
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">Modo Objetivo</h1>
-          <p className="text-xl text-gray-600">
-            Questões de múltipla escolha no formato das principais residências médicas
-          </p>
-          
-          {/* Progresso da Sessão */}
-          <div className="mt-6 bg-white rounded-xl shadow-md p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-gray-700">
-                Progresso da Sessão: {sessionQuestionsCount}/{sessionTarget}
-              </span>
-              <span className="text-sm text-gray-600">
-                {Math.round((sessionQuestionsCount / sessionTarget) * 100)}%
-              </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div
-                className="bg-orange-500 h-2.5 rounded-full transition-all"
-                style={{ width: `${(sessionQuestionsCount / sessionTarget) * 100}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Especialidade: {specialty} | Dificuldade: {difficulty === 'easy' ? 'Fácil' : difficulty === 'medium' ? 'Médio' : 'Difícil'}
+  const handlePrevious = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+    }
+  };
+
+  const handleFinish = () => {
+    // Verificar se todas as questões foram respondidas
+    const unanswered = answers.filter(a => a === null).length;
+    
+    if (unanswered > 0) {
+      addNotification(
+        `Você ainda tem ${unanswered} questão(ões) sem resposta. Deseja finalizar mesmo assim?`,
+        'warning'
+      );
+      // Poderia adicionar um modal de confirmação aqui
+    }
+    
+    setShowResults(true);
+    calculateResults();
+  };
+
+  const calculateResults = () => {
+    const results: QuestionResult[] = questions.map((q, idx) => ({
+      question: q,
+      selectedAnswer: answers[idx],
+      isCorrect: answers[idx] !== null && answers[idx] === q.correctAnswer
+    }));
+
+    const correctCount = results.filter(r => r.isCorrect).length;
+    const score = Math.round((correctCount / totalQuestions) * 100);
+
+    // Criar histórico de questões
+    const newHistory = [
+      ...(progress.questionHistory || []),
+      ...questions.map((q, idx) => ({
+        id: `obj-${Date.now()}-${idx}`,
+        question: q.question,
+        answer: q.options[answers[idx] || 0],
+        correct: answers[idx] === q.correctAnswer,
+        specialty: specialty,
+        type: 'objetiva' as const,
+        timestamp: new Date().toISOString(),
+        difficulty: difficulty,
+      }))
+    ];
+
+    // Atualizar progresso
+    const newSpecialties = { ...progress.specialties };
+    if (!newSpecialties[specialty]) {
+      newSpecialties[specialty] = { total: 0, correct: 0 };
+    }
+    newSpecialties[specialty].total += totalQuestions;
+    newSpecialties[specialty].correct += correctCount;
+    newSpecialties[specialty].lastStudied = new Date().toISOString();
+
+    updateProgress({
+      totalQuestions: progress.totalQuestions + totalQuestions,
+      correctAnswers: progress.correctAnswers + correctCount,
+      specialties: newSpecialties,
+      experience: progress.experience + (correctCount * 10) + 50, // Bônus por completar
+      questionHistory: newHistory,
+    });
+
+    addNotification(
+      `🎉 Prova concluída! Você acertou ${correctCount}/${totalQuestions} (${score}%)`,
+      score >= 70 ? 'success' : score >= 50 ? 'warning' : 'error'
+    );
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <Loader className="w-16 h-16 text-orange-500 animate-spin mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Gerando suas questões...</h2>
+            <p className="text-gray-600">
+              Estamos criando 10 questões personalizadas para você. Aguarde um momento.
             </p>
           </div>
         </div>
+      </DashboardLayout>
+    );
+  }
 
-        {!currentQuestion ? (
-          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-            <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-12 h-12 text-orange-500" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Pronto para começar?</h2>
-            <p className="text-gray-600 mb-6">
-              Escolha a especialidade e o nível de dificuldade
+  // Tela inicial - Configuração
+  if (questions.length === 0) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">Simulado - 10 Questões</h1>
+            <p className="text-xl text-gray-600">
+              Resolva 10 questões objetivas e receba seu desempenho completo no final
             </p>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg p-12">
+            <div className="w-24 h-24 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Target className="w-12 h-12 text-orange-500" />
+            </div>
             
-            {/* Seletores */}
-            <div className="max-w-md mx-auto space-y-4 mb-8">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+              Configure seu simulado
+            </h2>
+
+            <div className="max-w-md mx-auto space-y-6 mb-8">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Especialidade
@@ -203,7 +212,7 @@ const ObjetivaPage: React.FC = () => {
                   <option value="Infectologia">Infectologia</option>
                 </select>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Nível de Dificuldade
@@ -244,127 +253,267 @@ const ObjetivaPage: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>📝 Formato:</strong> 10 questões de múltipla escolha<br />
+                  <strong>⏱️ Duração:</strong> Sem limite de tempo<br />
+                  <strong>🎯 Resultado:</strong> Disponível ao finalizar
+                </p>
+              </div>
             </div>
-            
-            <button onClick={generateQuestion} disabled={loading} className="btn-primary">
-              {loading ? (
-                <>
-                  <Loader className="inline w-5 h-5 mr-2 animate-spin" />
-                  Gerando questão...
-                </>
-              ) : (
-                'Gerar Questão'
-              )}
+
+            <button
+              onClick={generateAllQuestions}
+              disabled={loading}
+              className="btn-primary w-full max-w-md mx-auto block"
+            >
+              Iniciar Simulado
             </button>
           </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Question */}
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-900">Questão</h3>
-                <span className="px-4 py-2 bg-orange-100 text-orange-700 rounded-lg font-semibold text-sm">
-                  Múltipla Escolha
-                </span>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Tela de resultados
+  if (showResults) {
+    const correctCount = answers.filter((ans, idx) => ans !== null && ans === questions[idx].correctAnswer).length;
+    const score = Math.round((correctCount / totalQuestions) * 100);
+    const answeredCount = answers.filter(a => a !== null).length;
+
+    return (
+      <DashboardLayout>
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-8">
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">Resultado do Simulado</h1>
+          </div>
+
+          {/* Card de Pontuação */}
+          <div className="bg-gradient-to-br from-orange-500 to-pink-500 rounded-2xl shadow-lg p-8 text-white mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <Trophy className="w-16 h-16 mb-4" />
+                <h2 className="text-3xl font-bold mb-2">Sua Pontuação</h2>
+                <p className="text-orange-100">
+                  {specialty} - {difficulty === 'easy' ? 'Fácil' : difficulty === 'medium' ? 'Médio' : 'Difícil'}
+                </p>
               </div>
-              <p className="text-gray-700 leading-relaxed text-lg mb-6">{currentQuestion.question}</p>
-
-              {/* Options */}
-              <div className="space-y-3">
-                {currentQuestion.options.map((option, index) => {
-                  const isSelected = selectedAnswer === index;
-                  const isCorrect = index === currentQuestion.correctAnswer;
-                  const showCorrect = showResult && isCorrect;
-                  const showWrong = showResult && isSelected && !isCorrect;
-
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => !showResult && setSelectedAnswer(index)}
-                      disabled={showResult}
-                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                        showCorrect
-                          ? 'border-green-500 bg-green-50'
-                          : showWrong
-                          ? 'border-red-500 bg-red-50'
-                          : isSelected
-                          ? 'border-orange-500 bg-orange-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      } ${showResult ? 'cursor-default' : 'cursor-pointer'}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <span
-                            className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                              showCorrect
-                                ? 'bg-green-500 text-white'
-                                : showWrong
-                                ? 'bg-red-500 text-white'
-                                : isSelected
-                                ? 'bg-orange-500 text-white'
-                                : 'bg-gray-200 text-gray-700'
-                            }`}
-                          >
-                            {String.fromCharCode(65 + index)}
-                          </span>
-                          <span className="text-gray-800">{option}</span>
-                        </div>
-                        {showCorrect && <CheckCircle className="w-6 h-6 text-green-500" />}
-                        {showWrong && <XCircle className="w-6 h-6 text-red-500" />}
-                      </div>
-                    </button>
-                  );
-                })}
+              <div className="text-right">
+                <div className="text-6xl font-bold">{score}%</div>
+                <div className="text-xl mt-2">{correctCount}/{totalQuestions} acertos</div>
               </div>
-
-              {/* Action Buttons */}
-              {!showResult && (
-                <div className="flex justify-end space-x-4 mt-6">
-                  <button onClick={generateQuestion} className="btn-secondary">
-                    Nova Questão
-                  </button>
-                  <button onClick={submitAnswer} className="btn-primary">
-                    Confirmar Resposta
-                  </button>
-                </div>
-              )}
             </div>
+          </div>
 
-            {/* Explanation */}
-            {showResult && (
-              <div className="bg-white rounded-2xl shadow-lg p-8">
-                <h3 className="text-xl font-bold text-gray-900 mb-4">Explicação</h3>
-                <div
-                  className={`p-4 rounded-lg mb-4 ${
-                    selectedAnswer === currentQuestion.correctAnswer
-                      ? 'bg-green-50 border border-green-200'
-                      : 'bg-red-50 border border-red-200'
-                  }`}
-                >
-                  <p
-                    className={`font-semibold ${
-                      selectedAnswer === currentQuestion.correctAnswer ? 'text-green-700' : 'text-red-700'
+          {/* Estatísticas */}
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <div className="bg-white rounded-xl shadow p-6 text-center">
+              <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-gray-900">{correctCount}</div>
+              <div className="text-sm text-gray-600">Corretas</div>
+            </div>
+            <div className="bg-white rounded-xl shadow p-6 text-center">
+              <XCircle className="w-8 h-8 text-red-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-gray-900">{answeredCount - correctCount}</div>
+              <div className="text-sm text-gray-600">Incorretas</div>
+            </div>
+            <div className="bg-white rounded-xl shadow p-6 text-center">
+              <Target className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+              <div className="text-2xl font-bold text-gray-900">{totalQuestions - answeredCount}</div>
+              <div className="text-sm text-gray-600">Sem resposta</div>
+            </div>
+          </div>
+
+          {/* Revisão das questões */}
+          <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">Revisão das Questões</h3>
+            <div className="space-y-6">
+              {questions.map((q, idx) => {
+                const userAnswer = answers[idx];
+                const isCorrect = userAnswer !== null && userAnswer === q.correctAnswer;
+                const wasAnswered = userAnswer !== null;
+
+                return (
+                  <div key={idx} className="border-b border-gray-200 pb-6 last:border-0">
+                    <div className="flex items-start gap-4">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0 ${
+                        !wasAnswered ? 'bg-gray-200 text-gray-600' :
+                        isCorrect ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                      }`}>
+                        {idx + 1}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-gray-800 font-medium mb-3">{q.question}</p>
+                        
+                        <div className="space-y-2 mb-3">
+                          {q.options.map((option, optIdx) => {
+                            const isUserAnswer = userAnswer === optIdx;
+                            const isCorrectAnswer = optIdx === q.correctAnswer;
+                            
+                            return (
+                              <div
+                                key={optIdx}
+                                className={`p-3 rounded-lg border-2 ${
+                                  isCorrectAnswer
+                                    ? 'border-green-500 bg-green-50'
+                                    : isUserAnswer && !isCorrect
+                                    ? 'border-red-500 bg-red-50'
+                                    : 'border-gray-200'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm">
+                                    <strong>{String.fromCharCode(65 + optIdx)})</strong> {option}
+                                  </span>
+                                  {isCorrectAnswer && <CheckCircle className="w-5 h-5 text-green-500" />}
+                                  {isUserAnswer && !isCorrect && <XCircle className="w-5 h-5 text-red-500" />}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                          <p className="text-sm font-semibold text-blue-900 mb-1">Explicação:</p>
+                          <p className="text-sm text-blue-800">{q.explanation}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Ações finais */}
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                setQuestions([]);
+                setAnswers(Array(10).fill(null));
+                setShowResults(false);
+                setCurrentIndex(0);
+              }}
+              className="btn-primary flex-1"
+            >
+              Fazer Novo Simulado
+            </button>
+            <button
+              onClick={() => navigate('/estudos', { state: { specialty, weakTopics: true } })}
+              className="btn-secondary flex-1"
+            >
+              Ver Material de Estudo
+            </button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Tela de questões (durante o simulado)
+  return (
+    <DashboardLayout>
+      <div className="max-w-4xl mx-auto">
+        {/* Header com progresso */}
+        <div className="mb-6 bg-white rounded-xl shadow p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Questão {currentIndex + 1} de {totalQuestions}</h2>
+              <p className="text-gray-600">{specialty} • {difficulty === 'easy' ? 'Fácil' : difficulty === 'medium' ? 'Médio' : 'Difícil'}</p>
+            </div>
+            <div className="text-right">
+              <div className="text-sm text-gray-600 mb-1">Respondidas</div>
+              <div className="text-2xl font-bold text-orange-500">
+                {answers.filter(a => a !== null).length}/{totalQuestions}
+              </div>
+            </div>
+          </div>
+
+          {/* Barra de progresso */}
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-orange-500 h-2 rounded-full transition-all"
+              style={{ width: `${((currentIndex + 1) / totalQuestions) * 100}%` }}
+            />
+          </div>
+
+          {/* Miniaturas das questões */}
+          <div className="flex gap-2 mt-4 flex-wrap">
+            {questions.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={() => setCurrentIndex(idx)}
+                className={`w-10 h-10 rounded-lg font-semibold transition-all ${
+                  idx === currentIndex
+                    ? 'bg-orange-500 text-white'
+                    : answers[idx] !== null
+                    ? 'bg-green-100 text-green-700 border-2 border-green-500'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {idx + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Questão atual */}
+        <div className="bg-white rounded-2xl shadow-lg p-8 mb-6">
+          <h3 className="text-xl font-bold text-gray-900 mb-6">Questão {currentIndex + 1}</h3>
+          <p className="text-gray-700 leading-relaxed text-lg mb-6">{currentQuestion.question}</p>
+
+          <div className="space-y-3">
+            {currentQuestion.options.map((option, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleSelectAnswer(idx)}
+                className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                  selectedAnswer === idx
+                    ? 'border-orange-500 bg-orange-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <span
+                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                      selectedAnswer === idx
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-gray-200 text-gray-700'
                     }`}
                   >
-                    {selectedAnswer === currentQuestion.correctAnswer
-                      ? '✓ Resposta Correta!'
-                      : '✗ Resposta Incorreta'}
-                  </p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Alternativa correta:{' '}
-                    <strong>{String.fromCharCode(65 + currentQuestion.correctAnswer)}</strong>
-                  </p>
+                    {String.fromCharCode(65 + idx)}
+                  </span>
+                  <span className="text-gray-800">{option}</span>
                 </div>
-                <p className="text-gray-700 leading-relaxed">{currentQuestion.explanation}</p>
-                <div className="flex justify-center mt-6">
-                  <button onClick={generateQuestion} className="btn-primary">
-                    Próxima Questão
-                  </button>
-                </div>
-              </div>
-            )}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
+
+        {/* Navegação */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={handlePrevious}
+            disabled={currentIndex === 0}
+            className="btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Anterior
+          </button>
+
+          {currentIndex === totalQuestions - 1 ? (
+            <button onClick={handleFinish} className="btn-primary">
+              Finalizar Simulado
+              <Trophy className="w-5 h-5 ml-2" />
+            </button>
+          ) : (
+            <button onClick={handleNext} className="btn-primary">
+              Próxima
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </button>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );

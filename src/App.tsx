@@ -8,11 +8,9 @@ import LoginPage from './pages/LoginPage';
 import CadastroPage from './pages/CadastroPage';
 import DashboardPage from './pages/DashboardPage';
 import QuestoesPage from './pages/QuestoesPage';
-import DissertativaPage from './pages/DissertativaPage';
-import ObjetivaPage from './pages/ObjetivaPage';
-import EstatisticasPage from './pages/EstatisticasPage';
 import EstudosPage from './pages/EstudosPage';
 import PerfilPage from './pages/PerfilPage';
+import HistoricoQuestoesPage from './pages/HistoricoQuestoesPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated } = useAuth();
@@ -48,30 +46,6 @@ function App() {
                 }
               />
               <Route
-                path="/dissertativa"
-                element={
-                  <ProtectedRoute>
-                    <DissertativaPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/objetiva"
-                element={
-                  <ProtectedRoute>
-                    <ObjetivaPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/estatisticas"
-                element={
-                  <ProtectedRoute>
-                    <EstatisticasPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/estudos"
                 element={
                   <ProtectedRoute>
@@ -84,6 +58,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <PerfilPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/historico-questoes"
+                element={
+                  <ProtectedRoute>
+                    <HistoricoQuestoesPage />
                   </ProtectedRoute>
                 }
               />

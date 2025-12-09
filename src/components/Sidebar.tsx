@@ -3,12 +3,10 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   HelpCircle,
-  FileEdit,
-  CheckSquare,
-  BarChart3,
   BookOpen,
   User,
   LogOut,
+  History,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -24,9 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
   const menuItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/questoes', icon: HelpCircle, label: 'Questões' },
-    { path: '/dissertativa', icon: FileEdit, label: 'Modo Dissertativo' },
-    { path: '/objetiva', icon: CheckSquare, label: 'Modo Objetivo' },
-    { path: '/estatisticas', icon: BarChart3, label: 'Estatísticas' },
+    { path: '/historico-questoes', icon: History, label: 'Histórico de Questões' },
     { path: '/estudos', icon: BookOpen, label: 'Material de Estudo' },
     { path: '/perfil', icon: User, label: 'Meu Perfil' },
   ];

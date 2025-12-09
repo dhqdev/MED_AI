@@ -1,27 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { HelpCircle, CheckCircle, Star, Clock, TrendingUp, ArrowUp, Target, PlayCircle, Lightbulb, Award } from 'lucide-react';
+import { 
+  HelpCircle, CheckCircle, Star, Clock, TrendingUp, Target, PlayCircle, 
+  Lightbulb, Award, BarChart3, Activity, ChevronDown, ChevronUp 
+} from 'lucide-react';
 import {
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import DashboardLayout from '../components/DashboardLayout';
 import { useAuth } from '../contexts/AuthContext';
 import { generatePersonalizedSuggestions, calculateDailyGoalProgress, calculateWeeklyGoalProgress } from '../services/suggestions';
-import type { SuggestedTopic } from '../contexts/AuthContext';
 
 const DashboardPage: React.FC = () => {
   const { user, progress, updateProgress } = useAuth();
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [showStatistics, setShowStatistics] = useState(false);
   
   const accuracyRate = progress.totalQuestions > 0 
     ? ((progress.correctAnswers / progress.totalQuestions) * 100).toFixed(0)
@@ -33,7 +27,6 @@ const DashboardPage: React.FC = () => {
   const dailyGoal = calculateDailyGoalProgress(progress);
   const weeklyGoal = calculateWeeklyGoalProgress(progress);
 
-  // Carregar sugestões ao montar o componente
   useEffect(() => {
     const loadSuggestions = async () => {
       if (progress.suggestedTopics.length === 0 && progress.totalQuestions >= 3) {
@@ -48,11 +41,9 @@ const DashboardPage: React.FC = () => {
         }
       }
     };
-    
     loadSuggestions();
   }, []);
 
-  // Calcular dados semanais baseado no histórico real
   const getWeeklyData = () => {
     const today = new Date();
     const weekData = Array.from({ length: 7 }, (_, i) => {
@@ -78,9 +69,34 @@ const DashboardPage: React.FC = () => {
     return weekData;
   };
 
-  const weeklyData = getWeeklyData();
+  const getMonthlyData = () => {
+    const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    const currentDate = new Date();
+    const monthlyStats: Record<string, { questions: number; correct: number }> = {};
 
-  // Calcular desempenho por especialidade baseado no histórico real
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+      const monthKey = `${months[date.getMonth()]}`;
+      monthlyStats[monthKey] = { questions: 0, correct: 0 };
+    }
+
+    progress.questionHistory?.forEach(q => {
+      const qDate = new Date(q.timestamp);
+      const monthKey = months[qDate.getMonth()];
+      if (monthlyStats[monthKey]) {
+        monthlyStats[monthKey].questions++;
+        if (q.correct) monthlyStats[monthKey].correct++;
+      }
+    });
+
+    return Object.entries(monthlyStats).map(([month, stats]) => ({
+      month,
+      questions: stats.questions,
+      correct: stats.correct,
+      accuracy: stats.questions > 0 ? Math.round((stats.correct / stats.questions) * 100) : 0
+    }));
+  };
+
   const getSpecialtyData = () => {
     const specialtyStats: Record<string, { total: number; correct: number }> = {};
     
@@ -95,69 +111,82 @@ const DashboardPage: React.FC = () => {
     return Object.entries(specialtyStats).map(([name, stats]) => ({
       name,
       value: stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0,
-    }));
+      total: stats.total
+    })).sort((a, b) => b.total - a.total).slice(0, 5);
   };
 
+  const weeklyData = getWeeklyData();
+  const monthlyData = getMonthlyData();
   const specialtyData = getSpecialtyData();
 
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
 
   return (
     <DashboardLayout>
-      {/* Welcome Section */}
-      <div className="mb-8">
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Bem-vindo, {user?.name?.split(' ')[0]}!
+      {/* Welcome Section - Mobile Optimized */}
+      <div className="mb-6">
+        <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-purple-600 rounded-3xl shadow-2xl p-6 md:p-8 text-white relative overflow-hidden">
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl" />
+          
+          <div className="relative">
+            <div className="mb-4">
+              <h1 className="text-2xl md:text-4xl font-bold mb-1 md:mb-2">
+                Olá, {user?.name?.split(' ')[0]}! 👋
               </h1>
-              <p className="text-gray-600">Continue sua jornada rumo à excelência médica</p>
+              <p className="text-blue-100 text-sm md:text-lg">Continue sua jornada rumo à excelência</p>
             </div>
-            <div className="flex items-center space-x-4 mt-4 md:mt-0">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-med">{progress.streakDays}</div>
-                <div className="text-sm text-gray-500">Dias consecutivos</div>
+            
+            {/* Stats - Grid responsivo */}
+            <div className="grid grid-cols-3 gap-3 md:gap-4 mt-5">
+              <div className="text-center bg-white/15 backdrop-blur-md px-3 py-3 md:px-6 md:py-4 rounded-2xl border border-white/20">
+                <div className="text-2xl md:text-3xl font-bold">{progress.streakDays}</div>
+                <div className="text-[10px] md:text-sm text-blue-100 font-medium mt-1">Dias seguidos</div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-500">{accuracyRate}%</div>
-                <div className="text-sm text-gray-500">Taxa de acerto</div>
+              <div className="text-center bg-white/15 backdrop-blur-md px-3 py-3 md:px-6 md:py-4 rounded-2xl border border-white/20">
+                <div className="text-2xl md:text-3xl font-bold">{accuracyRate}%</div>
+                <div className="text-[10px] md:text-sm text-blue-100 font-medium mt-1">Acertos</div>
+              </div>
+              <div className="text-center bg-white/15 backdrop-blur-md px-3 py-3 md:px-6 md:py-4 rounded-2xl border border-white/20">
+                <div className="text-2xl md:text-3xl font-bold">{progress.totalQuestions}</div>
+                <div className="text-[10px] md:text-sm text-blue-100 font-medium mt-1">Questões</div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Continue de onde parou */}
+      {/* Continue de onde parou - Mobile Optimized */}
       {progress.currentSession?.isActive && (
-        <div className="mb-8">
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl shadow-lg p-6 text-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-                  <PlayCircle className="w-6 h-6" />
+        <div className="mb-6">
+          <div className="bg-white rounded-3xl shadow-lg p-5 md:p-6 border-l-4 border-purple-600 hover:shadow-xl transition-shadow">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="flex items-start md:items-center space-x-3 md:space-x-4">
+                <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30 flex-shrink-0">
+                  <PlayCircle className="w-6 h-6 md:w-7 md:h-7 text-white" />
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold mb-1">Continue de onde parou</h3>
-                  <p className="text-purple-100">
-                    Sessão de {progress.currentSession.specialty} - {progress.currentSession.mode === 'objetiva' ? 'Múltipla Escolha' : 'Dissertativa'}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-base md:text-xl font-bold text-gray-900 mb-1">Continue de onde parou</h3>
+                  <p className="text-sm md:text-base text-gray-600 truncate">
+                    {progress.currentSession.specialty} - {progress.currentSession.mode === 'objetiva' ? 'Múltipla Escolha' : 'Dissertativa'}
                   </p>
-                  <p className="text-sm text-purple-200 mt-1">
-                    {progress.currentSession.questionsCompleted}/{progress.currentSession.questionsTotal} questões completadas
+                  <p className="text-xs md:text-sm text-gray-500 mt-0.5">
+                    {progress.currentSession.questionsCompleted}/{progress.currentSession.questionsTotal} questões
                   </p>
                 </div>
               </div>
               <Link
-                to={progress.currentSession.mode === 'objetiva' ? '/objetiva' : '/dissertativa'}
+                to="/questoes"
                 state={{ resumeSession: true }}
-                className="bg-white text-purple-600 px-6 py-3 rounded-lg font-semibold hover:bg-purple-50 transition-colors"
+                className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 md:px-8 py-2.5 md:py-3 rounded-2xl font-semibold hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg active:scale-95 text-center text-sm md:text-base"
               >
                 Continuar
               </Link>
             </div>
-            <div className="mt-4 bg-white/20 rounded-full h-2">
+            <div className="mt-4 bg-gray-100 rounded-full h-2.5">
               <div
-                className="bg-white rounded-full h-2 transition-all"
+                className="bg-gradient-to-r from-purple-600 to-purple-500 rounded-full h-2.5 transition-all shadow-sm"
                 style={{
                   width: `${(progress.currentSession.questionsCompleted / progress.currentSession.questionsTotal) * 100}%`,
                 }}
@@ -167,28 +196,28 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Metas Diárias e Semanais */}
-      <div className="grid md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-2xl shadow-lg p-6">
+      {/* Metas Diárias e Semanais - Mobile Optimized */}
+      <div className="grid md:grid-cols-2 gap-4 md:gap-6 mb-6">
+        <div className="bg-white rounded-3xl shadow-lg p-5 md:p-6 border-t-4 border-blue-600">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                <Target className="w-5 h-5 text-blue-600" />
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <Target className="w-6 h-6 text-blue-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900">Meta Diária</h3>
+              <h3 className="text-xl font-bold text-gray-900">Meta Diária</h3>
             </div>
-            <span className="text-2xl font-bold text-blue-600">
+            <span className="text-3xl font-bold text-blue-600">
               {dailyGoal.current}/{dailyGoal.target}
             </span>
           </div>
           <div className="relative pt-1">
-            <div className="overflow-hidden h-3 text-xs flex rounded-full bg-blue-100">
+            <div className="overflow-hidden h-4 text-xs flex rounded-full bg-blue-100">
               <div
                 style={{ width: `${dailyGoal.percentage}%` }}
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500 transition-all"
+                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-600 transition-all"
               />
             </div>
-            <p className="text-sm text-gray-600 mt-2">
+            <p className="text-sm text-gray-600 mt-3">
               {dailyGoal.percentage >= 100 
                 ? '🎉 Meta diária alcançada!' 
                 : `Faltam ${dailyGoal.target - dailyGoal.current} questões para completar sua meta`}
@@ -196,26 +225,26 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-lg p-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6 border-t-4 border-green-600">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                <Award className="w-5 h-5 text-green-600" />
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <Award className="w-6 h-6 text-green-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900">Meta Semanal</h3>
+              <h3 className="text-xl font-bold text-gray-900">Meta Semanal</h3>
             </div>
-            <span className="text-2xl font-bold text-green-600">
+            <span className="text-3xl font-bold text-green-600">
               {weeklyGoal.current}/{weeklyGoal.target}
             </span>
           </div>
           <div className="relative pt-1">
-            <div className="overflow-hidden h-3 text-xs flex rounded-full bg-green-100">
+            <div className="overflow-hidden h-4 text-xs flex rounded-full bg-green-100">
               <div
                 style={{ width: `${weeklyGoal.percentage}%` }}
-                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500 transition-all"
+                className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-600 transition-all"
               />
             </div>
-            <p className="text-sm text-gray-600 mt-2">
+            <p className="text-sm text-gray-600 mt-3">
               {weeklyGoal.percentage >= 100 
                 ? '🏆 Meta semanal alcançada!' 
                 : `Faltam ${weeklyGoal.target - weeklyGoal.current} questões esta semana`}
@@ -224,56 +253,155 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Estatísticas Expansíveis */}
+      <div className="mb-8">
+        <button
+          onClick={() => setShowStatistics(!showStatistics)}
+          className="w-full bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+                <BarChart3 className="w-6 h-6 text-indigo-600" />
+              </div>
+              <div className="text-left">
+                <h3 className="text-xl font-bold text-gray-900">Estatísticas Detalhadas</h3>
+                <p className="text-sm text-gray-600">Clique para {showStatistics ? 'ocultar' : 'visualizar'} gráficos e análises</p>
+              </div>
+            </div>
+            {showStatistics ? <ChevronUp className="w-6 h-6 text-gray-400" /> : <ChevronDown className="w-6 h-6 text-gray-400" />}
+          </div>
+        </button>
+
+        {showStatistics && (
+          <div className="mt-6 space-y-6">
+            {/* Gráfico Semanal */}
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <Activity className="w-5 h-5 text-blue-600" />
+                Desempenho Semanal
+              </h3>
+              {weeklyData.some(d => d.questions > 0) ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={weeklyData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="day" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="questions" fill="#3b82f6" name="Questões" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="correct" fill="#10b981" name="Acertos" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-gray-500">
+                  <p>Nenhum dado disponível para esta semana</p>
+                </div>
+              )}
+            </div>
+
+            {/* Gráfico Mensal */}
+            <div className="bg-white rounded-2xl shadow-lg p-8">
+              <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-green-600" />
+                Evolução Mensal
+              </h3>
+              {monthlyData.some(m => m.questions > 0) ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={monthlyData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="questions" stroke="#3b82f6" name="Questões" strokeWidth={3} />
+                    <Line type="monotone" dataKey="correct" stroke="#10b981" name="Acertos" strokeWidth={3} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex items-center justify-center h-[300px] text-gray-500">
+                  <p>Nenhum dado disponível ainda</p>
+                </div>
+              )}
+            </div>
+
+            {/* Desempenho por Especialidade */}
+            {specialtyData.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-lg p-8">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">Desempenho por Especialidade</h3>
+                <div className="space-y-4">
+                  {specialtyData.map((spec, index) => (
+                    <div key={spec.name}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-gray-700">{spec.name}</span>
+                        <span className="text-sm font-bold" style={{ color: COLORS[index % COLORS.length] }}>
+                          {spec.value}% ({spec.total} questões)
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-3">
+                        <div
+                          className="h-3 rounded-full transition-all"
+                          style={{
+                            width: `${spec.value}%`,
+                            backgroundColor: COLORS[index % COLORS.length]
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Sugestões Personalizadas */}
       {(progress.suggestedTopics.length > 0 || loadingSuggestions) && (
         <div className="mb-8">
-          <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="bg-white rounded-2xl shadow-lg p-8">
             <div className="flex items-center space-x-3 mb-6">
-              <div className="w-10 h-10 bg-yellow-100 rounded-xl flex items-center justify-center">
-                <Lightbulb className="w-5 h-5 text-yellow-600" />
+              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
+                <Lightbulb className="w-6 h-6 text-yellow-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900">Sugestões Personalizadas para Você</h3>
+              <h3 className="text-2xl font-bold text-gray-900">Sugestões Personalizadas</h3>
             </div>
             {loadingSuggestions ? (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-12 text-gray-500">
+                <div className="animate-spin w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4"></div>
                 Analisando seu desempenho...
               </div>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {progress.suggestedTopics.map((topic, index) => (
-                  <div
+                  <Link
                     key={index}
-                    className={`p-4 rounded-xl border-2 ${
+                    to="/questoes"
+                    state={{ specialty: topic.specialty }}
+                    className={`p-5 rounded-xl border-2 transition-all hover:shadow-lg ${
                       topic.priority === 'high'
-                        ? 'border-red-200 bg-red-50'
+                        ? 'border-red-300 bg-red-50 hover:bg-red-100'
                         : topic.priority === 'medium'
-                        ? 'border-yellow-200 bg-yellow-50'
-                        : 'border-blue-200 bg-blue-50'
+                        ? 'border-yellow-300 bg-yellow-50 hover:bg-yellow-100'
+                        : 'border-green-300 bg-green-50 hover:bg-green-100'
                     }`}
                   >
-                    <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-start justify-between mb-3">
                       <h4 className="font-bold text-gray-900">{topic.specialty}</h4>
                       <span
-                        className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
                           topic.priority === 'high'
-                            ? 'bg-red-200 text-red-700'
+                            ? 'bg-red-200 text-red-800'
                             : topic.priority === 'medium'
-                            ? 'bg-yellow-200 text-yellow-700'
-                            : 'bg-blue-200 text-blue-700'
+                            ? 'bg-yellow-200 text-yellow-800'
+                            : 'bg-green-200 text-green-800'
                         }`}
                       >
-                        {topic.priority === 'high' ? 'Alta' : topic.priority === 'medium' ? 'Média' : 'Baixa'}
+                        {topic.priority === 'high' ? 'Urgente' : topic.priority === 'medium' ? 'Médio' : 'Baixo'}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600 mb-3">{topic.reason}</p>
-                    <Link
-                      to="/questoes"
-                      state={{ specialty: topic.specialty }}
-                      className="text-sm font-semibold text-blue-600 hover:text-blue-700"
-                    >
-                      Estudar agora →
-                    </Link>
-                  </div>
+                    <p className="text-sm text-gray-600">{topic.reason}</p>
+                  </Link>
                 ))}
               </div>
             )}
@@ -281,227 +409,54 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard
-          icon={<HelpCircle className="w-6 h-6 text-white" />}
-          iconBg="bg-blue-light"
-          title="Questões Respondidas"
-          value={progress.totalQuestions.toString()}
-          change="+12% esta semana"
-          positive={true}
-        />
-        <StatCard
-          icon={<CheckCircle className="w-6 h-6 text-white" />}
-          iconBg="bg-green-500"
-          title="Taxa de Acerto"
-          value={`${accuracyRate}%`}
-          change="+5% esta semana"
-          positive={true}
-        />
-        <StatCard
-          icon={<Star className="w-6 h-6 text-white" />}
-          iconBg="bg-purple-500"
-          title="Nível Atual"
-          value={progress.level.toString()}
-          change="Avançado"
-          positive={true}
-        />
-        <StatCard
-          icon={<Clock className="w-6 h-6 text-white" />}
-          iconBg="bg-orange-500"
-          title="Tempo Médio/Dia"
-          value={`${avgTimePerDay}h`}
-          change="Meta: 3h/dia"
-          positive={false}
-        />
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid lg:grid-cols-2 gap-6 mb-8">
-        {/* Performance Chart */}
-        <div className="card-hover bg-white rounded-2xl shadow-lg p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Desempenho Semanal</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={weeklyData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="questions" fill="#3b82f6" name="Questões" />
-              <Bar dataKey="correct" fill="#10b981" name="Acertos" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Specialty Performance */}
-        <div className="card-hover bg-white rounded-2xl shadow-lg p-6">
-          <h3 className="text-xl font-bold text-gray-900 mb-4">Desempenho por Especialidade</h3>
-          {specialtyData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={specialtyData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value }) => `${name}: ${value}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {specialtyData.map((_entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-[300px] text-gray-500">
-              <p>Responda questões para ver seu desempenho por especialidade</p>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Quick Actions */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        <ActionCard
-          title="Questões Rápidas"
-          description="Responda questões aleatórias adaptadas ao seu nível"
-          link="/questoes"
-          color="bg-blue-med"
-        />
-        <ActionCard
-          title="Modo Dissertativo"
-          description="Pratique com questões dissertativas e receba feedback detalhado"
-          link="/dissertativa"
-          color="bg-purple-500"
-        />
-        <ActionCard
-          title="Modo Objetivo"
-          description="Teste seus conhecimentos com questões de múltipla escolha"
-          link="/objetiva"
-          color="bg-orange-500"
-        />
-      </div>
+      <div className="grid md:grid-cols-3 gap-6">
+        <Link
+          to="/questoes"
+          className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
+        >
+          <div className="flex items-center space-x-4">
+            <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+              <HelpCircle className="w-7 h-7 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900 text-lg">Resolver Questões</h3>
+              <p className="text-sm text-gray-600">Pratique agora</p>
+            </div>
+          </div>
+        </Link>
 
-      {/* Recent Activity */}
-      <div className="bg-white rounded-2xl shadow-lg p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-4">Atividade Recente</h3>
-        {progress.questionHistory && progress.questionHistory.length > 0 ? (
-          <div className="space-y-4">
-            {progress.questionHistory.slice(-4).reverse().map((item, index) => (
-              <ActivityItem
-                key={index}
-                title={`Questão de ${item.specialty}`}
-                status={item.correct ? 'Correta' : 'Incorreta'}
-                time={new Date(item.timestamp).toLocaleString('pt-BR')}
-                correct={item.correct}
-              />
-            ))}
+        <Link
+          to="/estudos"
+          className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
+        >
+          <div className="flex items-center space-x-4">
+            <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+              <Star className="w-7 h-7 text-green-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900 text-lg">Material de Estudo</h3>
+              <p className="text-sm text-gray-600">Conteúdo personalizado</p>
+            </div>
           </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            <p>Nenhuma atividade ainda. Comece respondendo questões!</p>
+        </Link>
+
+        <Link
+          to="/perfil"
+          className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-all group"
+        >
+          <div className="flex items-center space-x-4">
+            <div className="w-14 h-14 bg-purple-100 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+              <Clock className="w-7 h-7 text-purple-600" />
+            </div>
+            <div>
+              <h3 className="font-bold text-gray-900 text-lg">Meu Perfil</h3>
+              <p className="text-sm text-gray-600">Ver conquistas</p>
+            </div>
           </div>
-        )}
+        </Link>
       </div>
     </DashboardLayout>
-  );
-};
-
-interface StatCardProps {
-  icon: React.ReactNode;
-  iconBg: string;
-  title: string;
-  value: string;
-  change: string;
-  positive: boolean;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ icon, iconBg, title, value, change, positive }) => {
-  return (
-    <div className="card-hover bg-white rounded-2xl shadow-lg p-6">
-      <div className="flex items-center">
-        <div className={`w-12 h-12 ${iconBg} rounded-xl flex items-center justify-center`}>
-          {icon}
-        </div>
-        <div className="ml-4">
-          <div className="text-2xl font-bold text-gray-900">{value}</div>
-          <div className="text-sm text-gray-500">{title}</div>
-        </div>
-      </div>
-      <div className="mt-4">
-        <div className={`flex items-center text-sm ${positive ? 'text-green-600' : 'text-orange-600'}`}>
-          {positive && <ArrowUp className="w-4 h-4 mr-1" />}
-          <span>{change}</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface ActionCardProps {
-  title: string;
-  description: string;
-  link: string;
-  color: string;
-}
-
-const ActionCard: React.FC<ActionCardProps> = ({ title, description, link, color }) => {
-  return (
-    <Link
-      to={link}
-      className={`card-hover ${color} text-white rounded-2xl shadow-lg p-6 block`}
-    >
-      <h4 className="text-xl font-bold mb-2">{title}</h4>
-      <p className="text-white/90 mb-4">{description}</p>
-      <div className="flex items-center text-sm font-semibold">
-        Começar agora
-        <TrendingUp className="ml-2 w-4 h-4" />
-      </div>
-    </Link>
-  );
-};
-
-interface ActivityItemProps {
-  title: string;
-  status: string;
-  time: string;
-  correct: boolean;
-}
-
-const ActivityItem: React.FC<ActivityItemProps> = ({ title, status, time, correct }) => {
-  return (
-    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-      <div className="flex items-center space-x-4">
-        <div
-          className={`w-10 h-10 rounded-full flex items-center justify-center ${
-            correct ? 'bg-green-100' : 'bg-red-100'
-          }`}
-        >
-          {correct ? (
-            <CheckCircle className="w-5 h-5 text-green-600" />
-          ) : (
-            <span className="text-red-600 font-bold">✕</span>
-          )}
-        </div>
-        <div>
-          <div className="font-semibold text-gray-900">{title}</div>
-          <div className="text-sm text-gray-500">{time}</div>
-        </div>
-      </div>
-      <div
-        className={`px-3 py-1 rounded-full text-sm font-semibold ${
-          correct ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-        }`}
-      >
-        {status}
-      </div>
-    </div>
   );
 };
 
