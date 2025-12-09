@@ -2,11 +2,48 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileEdit, CheckSquare, Brain, Target, TrendingUp } from 'lucide-react';
 import DashboardLayout from '../components/DashboardLayout';
+import { useAuth } from '../contexts/AuthContext';
 
 const QuestoesPage: React.FC = () => {
+  const { progress } = useAuth();
   const [selectedMode, setSelectedMode] = useState<'dissertativa' | 'objetiva' | null>(null);
   const [selectedSpecialty, setSelectedSpecialty] = useState('');
   const [difficulty, setDifficulty] = useState('medium');
+
+  // Calcular estatísticas de hoje
+  const getTodayStats = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayQuestions = progress.questionHistory?.filter(q => {
+      const qDate = new Date(q.timestamp);
+      qDate.setHours(0, 0, 0, 0);
+      return qDate.getTime() === today.getTime();
+    }) || [];
+    
+    const total = todayQuestions.length;
+    const correct = todayQuestions.filter(q => q.correct).length;
+    const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
+    
+    return { total, correct, rate };
+  };
+
+  // Calcular estatísticas da semana
+  const getWeekStats = () => {
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekQuestions = progress.questionHistory?.filter(q => 
+      new Date(q.timestamp) >= weekAgo
+    ) || [];
+    
+    const total = weekQuestions.length;
+    const correct = weekQuestions.filter(q => q.correct).length;
+    const rate = total > 0 ? Math.round((correct / total) * 100) : 0;
+    
+    return { total, correct, rate };
+  };
+
+  const todayStats = getTodayStats();
+  const weekStats = getWeekStats();
 
   const specialties = [
     'Cardiologia',
@@ -205,8 +242,10 @@ const QuestoesPage: React.FC = () => {
                 <CheckSquare className="w-6 h-6 text-white" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-gray-900 mb-2">12 questões</div>
-            <div className="text-sm text-gray-600">10 acertos (83%)</div>
+            <div className="text-3xl font-bold text-gray-900 mb-2">{todayStats.total} questões</div>
+            <div className="text-sm text-gray-600">
+              {todayStats.correct} acertos ({todayStats.rate}%)
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -216,8 +255,10 @@ const QuestoesPage: React.FC = () => {
                 <TrendingUp className="w-6 h-6 text-white" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-gray-900 mb-2">87 questões</div>
-            <div className="text-sm text-gray-600">74 acertos (85%)</div>
+            <div className="text-3xl font-bold text-gray-900 mb-2">{weekStats.total} questões</div>
+            <div className="text-sm text-gray-600">
+              {weekStats.correct} acertos ({weekStats.rate}%)
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl shadow-lg p-6">
@@ -227,8 +268,13 @@ const QuestoesPage: React.FC = () => {
                 <Target className="w-6 h-6 text-white" />
               </div>
             </div>
-            <div className="text-3xl font-bold text-gray-900 mb-2">247 questões</div>
-            <div className="text-sm text-gray-600">210 acertos (85%)</div>
+            <div className="text-3xl font-bold text-gray-900 mb-2">{progress.totalQuestions} questões</div>
+            <div className="text-sm text-gray-600">
+              {progress.correctAnswers} acertos (
+              {progress.totalQuestions > 0 
+                ? Math.round((progress.correctAnswers / progress.totalQuestions) * 100)
+                : 0}%)
+            </div>
           </div>
         </div>
       </div>

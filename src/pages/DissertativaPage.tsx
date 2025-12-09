@@ -2,24 +2,43 @@ import React, { useState } from 'react';
 import { Send, Loader } from 'lucide-react';
 import DashboardLayout from '../components/DashboardLayout';
 import { useNotification } from '../contexts/NotificationContext';
+import { useAuth } from '../contexts/AuthContext';
+import { 
+  generateDissertativeQuestion, 
+  correctDissertativeAnswer,
+  type DissertativeFeedback
+} from '../services/openai';
+
+export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 
 const DissertativaPage: React.FC = () => {
+  const { progress, updateProgress } = useAuth();
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
-  const [feedback, setFeedback] = useState<any>(null);
+  const [feedback, setFeedback] = useState<DissertativeFeedback | null>(null);
   const [loading, setLoading] = useState(false);
+  const [questionId] = useState(() => Date.now().toString());
+  const [specialty] = useState('Cardiologia'); // Pode ser passado via props ou state
+  const [difficulty] = useState<DifficultyLevel>('medium'); // Pode ser passado via props ou state
   const { addNotification } = useNotification();
 
   const generateQuestion = async () => {
     setLoading(true);
-    // Simulação - em produção, chamar API
-    setTimeout(() => {
-      setQuestion(
-        'Um paciente de 65 anos, hipertenso e diabético, chega ao pronto-socorro com dor precordial iniciada há 2 horas, com irradiação para membro superior esquerdo e mandíbula. Ao exame físico, apresenta-se sudoreico, hipocorado +/4+, PA: 90/60 mmHg, FC: 110 bpm. O ECG mostra supradesnivelamento do segmento ST em DII, DIII e aVF. Discorra sobre a hipótese diagnóstica mais provável, os exames complementares necessários e a conduta terapêutica inicial.'
-      );
-      setLoading(false);
+    try {
+      const generatedQuestion = await generateDissertativeQuestion(specialty, difficulty);
+      setQuestion(generatedQuestion);
       addNotification('Questão gerada com sucesso!', 'success');
-    }, 2000);
+    } catch (error) {
+      console.error('Erro ao gerar questão:', error);
+      addNotification(
+        error instanceof Error 
+          ? error.message 
+          : 'Erro ao gerar questão. Verifique se a API Key está configurada.',
+        'error'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const submitAnswer = async () => {
@@ -29,25 +48,44 @@ const DissertativaPage: React.FC = () => {
     }
 
     setLoading(true);
-    // Simulação - em produção, chamar API OpenAI
-    setTimeout(() => {
-      setFeedback({
-        score: 85,
-        strengths: [
-          'Identificou corretamente o IAM inferior',
-          'Mencionou os exames complementares adequados',
-          'Propôs conduta terapêutica apropriada',
-        ],
-        improvements: [
-          'Poderia detalhar melhor os critérios diagnósticos do IAM',
-          'Não mencionou a importância do tempo porta-balão',
-        ],
-        detailedFeedback:
-          'Sua resposta demonstra bom conhecimento sobre o manejo do infarto agudo do miocárdio. Você identificou corretamente a apresentação clínica típica e propôs uma conduta adequada. Para melhorar, recomendo revisar os protocolos de atendimento ao IAM com supra de ST, especialmente os tempos recomendados para reperfusão.',
+    try {
+      const generatedFeedback = await correctDissertativeAnswer(question, answer, specialty);
+      setFeedback(generatedFeedback);
+      
+      // Atualizar progresso
+      const isCorrect = generatedFeedback.score >= 70; // Considerar correto se score >= 70%
+      const newHistory = [
+        ...(progress.questionHistory || []),
+        {
+          id: questionId,
+          question,
+          answer,
+          correct: isCorrect,
+          specialty,
+          type: 'dissertativa' as const,
+          timestamp: new Date().toISOString(),
+          score: generatedFeedback.score,
+        },
+      ];
+      
+      updateProgress({
+        totalQuestions: progress.totalQuestions + 1,
+        correctAnswers: progress.correctAnswers + (isCorrect ? 1 : 0),
+        questionHistory: newHistory,
       });
-      setLoading(false);
+      
       addNotification('Resposta corrigida!', 'success');
-    }, 3000);
+    } catch (error) {
+      console.error('Erro ao corrigir resposta:', error);
+      addNotification(
+        error instanceof Error 
+          ? error.message 
+          : 'Erro ao corrigir resposta. Verifique se a API Key está configurada.',
+        'error'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

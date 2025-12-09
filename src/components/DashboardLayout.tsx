@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from 'react';
+import React, { type ReactNode, useState } from 'react';
 import Sidebar from './Sidebar';
 import { Menu } from 'lucide-react';
 

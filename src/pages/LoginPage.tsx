@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, Sparkles, Target, TrendingUp, Award } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -9,6 +9,8 @@ const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [isFirstLogin, setIsFirstLogin] = useState(false);
   
   const { login } = useAuth();
   const { addNotification } = useNotification();
@@ -19,14 +21,20 @@ const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      await login(email, password);
+      const firstLogin = await login(email, password);
+      setIsFirstLogin(firstLogin || false);
       addNotification('Login realizado com sucesso!', 'success');
-      navigate('/dashboard');
+      setShowWelcomeModal(true);
     } catch (error) {
       addNotification('Erro ao fazer login. Verifique suas credenciais.', 'error');
-    } finally {
       setLoading(false);
     }
+  };
+  
+  const handleCloseModal = () => {
+    setShowWelcomeModal(false);
+    setLoading(false);
+    navigate('/dashboard');
   };
 
   return (
@@ -156,6 +164,91 @@ const LoginPage: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Modal de Boas-vindas */}
+      {showWelcomeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
+            <div className="p-8">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full mb-4">
+                  <Sparkles className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                  {isFirstLogin ? '🎉 Bem-vindo ao MedMaster!' : '👋 Bem-vindo de volta!'}
+                </h2>
+                <p className="text-gray-600 text-lg">
+                  {isFirstLogin 
+                    ? 'Sua jornada rumo à excelência médica começa agora!' 
+                    : 'Continue sua jornada de aprendizado onde você parou!'}
+                </p>
+              </div>
+
+              <div className="space-y-4 mb-8">
+                <div className="flex items-start space-x-4 p-4 bg-blue-50 rounded-xl">
+                  <div className="flex-shrink-0 w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
+                    <Target className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-1">Questões Personalizadas</h3>
+                    <p className="text-sm text-gray-600">
+                      A IA cria questões adaptadas ao seu nível e especialidades favoritas
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-4 p-4 bg-purple-50 rounded-xl">
+                  <div className="flex-shrink-0 w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-1">Análise de Performance</h3>
+                    <p className="text-sm text-gray-600">
+                      Acompanhe seu progresso em tempo real com estatísticas detalhadas
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-4 p-4 bg-green-50 rounded-xl">
+                  <div className="flex-shrink-0 w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
+                    <Award className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-1">Sugestões Inteligentes</h3>
+                    <p className="text-sm text-gray-600">
+                      Receba recomendações personalizadas de tópicos para estudar
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {isFirstLogin && (
+                <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-xl p-6 mb-8">
+                  <h3 className="font-bold text-gray-900 mb-3 flex items-center">
+                    <Sparkles className="w-5 h-5 mr-2 text-blue-600" />
+                    Dica Inicial
+                  </h3>
+                  <p className="text-gray-700 text-sm mb-2">
+                    Configure suas preferências no <strong>Perfil</strong> para personalizar completamente sua experiência de estudo!
+                  </p>
+                  <ul className="text-sm text-gray-600 space-y-1 ml-4">
+                    <li>• Escolha suas especialidades favoritas</li>
+                    <li>• Defina metas diárias e semanais</li>
+                    <li>• Ajuste o nível de dificuldade</li>
+                  </ul>
+                </div>
+              )}
+
+              <button
+                onClick={handleCloseModal}
+                className="w-full btn-primary text-lg py-4"
+              >
+                {isFirstLogin ? 'Começar a Estudar! 🚀' : 'Continuar Estudando! 📚'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
